@@ -7,6 +7,7 @@
         <attr name="max_text_size" format="dimension" />
         <attr name="current_line_highLight_text_color" format="reference|color" />
         <attr name="lineSpace" format="dimension" />
+        <attr name="current_line_top_offset" format="dimension" />
         <attr name="maxWordsPerLine" format="integer" />
     </declare-styleable>
 

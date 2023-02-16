@@ -21,10 +21,8 @@ import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.DisplayMetrics;
 import android.util.Log;
-import android.util.LogPrinter;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.ViewGroup.LayoutParams;
 import android.view.animation.LinearInterpolator;
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
@@ -66,7 +64,7 @@ public class KrcView extends RecyclerView {
     private float minTextSize = 0f;
     private float maxTextSize = 0f;
     private float lineSpace = 0f;
-    private int currentLineWithTopOffset = 4;
+    private int currentLineTopOffset;
 
     private final LinearSmoothScroller topSmoothScroller;
 
@@ -87,14 +85,13 @@ public class KrcView extends RecyclerView {
 
             @Override
             public int calculateDtToFit(int viewStart, int viewEnd, int boxStart, int boxEnd, int snapPreference) {
-                return (boxStart - viewStart) + currentLineWithTopOffset;
+                return (boxStart - viewStart) + currentLineTopOffset;
             }
 
             public float calculateSpeedPerPixel(DisplayMetrics displayMetrics) {
                 return super.calculateSpeedPerPixel(displayMetrics) * 12;
             }
         };
-        currentLineWithTopOffset = (int) dp2px(100);
         init(attrs);
     }
 
@@ -114,13 +111,15 @@ public class KrcView extends RecyclerView {
                     return;
                 }
                 if (adapterPosition == 0) {
-                    lp.topMargin = currentLineWithTopOffset;
+                    lp.topMargin = currentLineTopOffset;
                 } else {
                     lp.topMargin = 0;
                 }
 
                 if (adapterPosition == getAdapter().getItemCount() - 1) {
-                    lp.bottomMargin = KrcView.this.getHeight() - currentLineWithTopOffset;
+                    lp.bottomMargin =
+                            KrcView.this.getHeight() - KrcView.this.getPaddingBottom() - KrcView.this.getPaddingTop() -
+                                    (child.getHeight() + (int) lineSpace + currentLineTopOffset);
                 } else {
                     lp.bottomMargin = 0;
                 }
@@ -133,7 +132,10 @@ public class KrcView extends RecyclerView {
         maxTextSize = a.getDimension(R.styleable.KrcView_max_text_size, sp2px(18));
         assert (maxTextSize >= minTextSize);
         lineSpace = a.getDimension(R.styleable.KrcView_lineSpace, 0f);
+        currentLineTopOffset = (int) a.getDimension(R.styleable.KrcView_current_line_top_offset, 0f);
+        assert currentLineTopOffset >= 0;
         maxWordsPerLine = a.getInt(R.styleable.KrcView_maxWordsPerLine, 10);
+        assert (maxWordsPerLine > 0);
         normalTextColor = readAttrColor(a, R.styleable.KrcView_normal_text_color);
         currentLineTextColor = readAttrColor(a, R.styleable.KrcView_current_line_text_color);
         currentLineHLTextColor = readAttrColor(a, R.styleable.KrcView_current_line_highLight_text_color);
