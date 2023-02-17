@@ -7,6 +7,7 @@ import android.widget.SeekBar
 import android.widget.SeekBar.OnSeekBarChangeListener
 import android.widget.TextView
 import com.bytedance.lyricsview.databinding.ActivityMainBinding
+import com.bytedance.lyricsview.databinding.ScrollLocateViewBinding
 
 class MainActivity : AppCompatActivity() {
     var progress = 0L
@@ -23,6 +24,8 @@ class MainActivity : AppCompatActivity() {
         setContentView(vb.root)
         val krcData = KrcParser.readFromAsset(this, "花海.krc")
         vb.krcView.setKrcData(krcData)
+        val scrollLocateView=ScrollLocateViewBinding.inflate(layoutInflater)
+        vb.krcView.setScrollLocateView(scrollLocateView.root)
         progress = krcData[0].startTimeMs - 100
         vb.seekBar.max = krcData!!.get(krcData.size - 1).endTimeMs().toInt() + 10000
         vb.seekBar.setOnSeekBarChangeListener(object : OnSeekBarChangeListener {

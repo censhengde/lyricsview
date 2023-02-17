@@ -24,12 +24,15 @@ import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.animation.LinearInterpolator;
+import android.widget.FrameLayout;
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.LinearSmoothScroller;
 import androidx.recyclerview.widget.RecyclerView;
+import androidx.recyclerview.widget.RecyclerView.LayoutManager;
+import androidx.recyclerview.widget.RecyclerView.ViewHolder;
 import com.bytedance.krcview.KrcLineInfo.Word;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -42,7 +45,7 @@ import org.lsposed.hiddenapibypass.HiddenApiBypass;
  *
  * explain：
  */
-public class KrcView extends RecyclerView {
+public class KrcView extends FrameLayout {
 
     private static final String TAG = "KrcView";
     private List<KrcLineInfo> krcData = emptyList();
@@ -65,8 +68,8 @@ public class KrcView extends RecyclerView {
     private float maxTextSize = 0f;
     private float lineSpace = 0f;
     private int currentLineTopOffset;
-
-    private final LinearSmoothScroller topSmoothScroller;
+    private final KrcInnerView krcInnerView;
+    private View scrollLocateView;
 
     public KrcView(@NonNull Context context) {
         this(context, null);
@@ -78,55 +81,15 @@ public class KrcView extends RecyclerView {
 
     public KrcView(@NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-        topSmoothScroller = new LinearSmoothScroller(getContext()) {
-            public int getVerticalSnapPreference() {
-                return SNAP_TO_START;
-            }
-
-            @Override
-            public int calculateDtToFit(int viewStart, int viewEnd, int boxStart, int boxEnd, int snapPreference) {
-                return (boxStart - viewStart) + currentLineTopOffset;
-            }
-
-            public float calculateSpeedPerPixel(DisplayMetrics displayMetrics) {
-                return super.calculateSpeedPerPixel(displayMetrics) * 12;
-            }
-        };
         init(attrs);
+        krcInnerView = new KrcInnerView(context);
+        krcInnerView.setLayoutParams(new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        this.addView(krcInnerView);
+
     }
 
     private void init(AttributeSet attrs) {
-        this.setHasFixedSize(true);
-
-        this.setLayoutManager(new LinearLayoutManager(getContext(), VERTICAL, false) {
-            @Override
-            public void measureChildWithMargins(@NonNull View child, int widthUsed, int heightUsed) {
-                super.measureChildWithMargins(child, widthUsed, heightUsed);
-                if (getAdapter() == null) {
-                    return;
-                }
-                final LayoutParams lp = (LayoutParams) child.getLayoutParams();
-                final int adapterPosition = lp.getViewAdapterPosition();
-                if (adapterPosition < 0) {
-                    return;
-                }
-                if (adapterPosition == 0) {
-                    lp.topMargin = currentLineTopOffset;
-                } else {
-                    lp.topMargin = 0;
-                }
-
-                if (adapterPosition == getAdapter().getItemCount() - 1) {
-                    lp.bottomMargin =
-                            KrcView.this.getHeight() - KrcView.this.getPaddingBottom() - KrcView.this.getPaddingTop() -
-                                    (child.getHeight() + (int) lineSpace + currentLineTopOffset);
-                } else {
-                    lp.bottomMargin = 0;
-                }
-            }
-
-        });
-
         final TypedArray a = getContext().obtainStyledAttributes(attrs, R.styleable.KrcView);
         minTextSize = a.getDimension(R.styleable.KrcView_min_text_size, sp2px(15));
         maxTextSize = a.getDimension(R.styleable.KrcView_max_text_size, sp2px(18));
@@ -140,19 +103,6 @@ public class KrcView extends RecyclerView {
         currentLineTextColor = readAttrColor(a, R.styleable.KrcView_current_line_text_color);
         currentLineHLTextColor = readAttrColor(a, R.styleable.KrcView_current_line_highLight_text_color);
         a.recycle();
-        if (lineSpace > 0f) {
-            addItemDecoration(new ItemDecoration() {
-                @Override
-                public void getItemOffsets(@NonNull Rect outRect, @NonNull View view, @NonNull RecyclerView parent,
-                        @NonNull State state) {
-                    final int position = parent.getChildAdapterPosition(view);
-                    if (position > 0) {
-                        outRect.top = (int) lineSpace;
-                    }
-                }
-            });
-        }
-
     }
 
     @ColorInt
@@ -186,7 +136,7 @@ public class KrcView extends RecyclerView {
             this.progress = progress;
             curLineIndex = Collections.binarySearch(krcData, progress);
             curLineIndex = Math.max(-1, curLineIndex);
-            updateCurrentLineState(progress);
+            krcInnerView.updateCurrentLineState(progress);
             return;
         }
 
@@ -194,7 +144,7 @@ public class KrcView extends RecyclerView {
         if (progress < krcData.get(0).startTimeMs) {
             return;
         }
-        KrcLineInfo lastLine = krcData.get(krcData.size() - 1);
+        final KrcLineInfo lastLine = krcData.get(krcData.size() - 1);
         if (progress > lastLine.endTimeMs()) {
             return;
         }
@@ -210,29 +160,10 @@ public class KrcView extends RecyclerView {
         }
         Log.i(TAG, "===> setProgress:遍历次数： " + loopTime);
         // current line is changed
-        updateCurrentLineState(progress);
+        krcInnerView.updateCurrentLineState(progress);
 
     }
 
-    private void updateCurrentLineState(long progress) {
-        if (getAdapter() == null) {
-            return;
-        }
-        if (curLineIndex != lastLineIndex) {
-            if (lastLineIndex != -1) {
-                getAdapter().notifyItemChanged(lastLineIndex, false);
-            }
-            if (curLineIndex != -1) {
-                getAdapter().notifyItemChanged(curLineIndex, true);
-            }
-            lastLineIndex = curLineIndex;
-            // scroll to current line
-            scrollToPositionWithOffset(Math.max(0, curLineIndex));
-        }
-        if (curLineIndex != -1) {
-            getAdapter().notifyItemChanged(curLineIndex, progress - krcData.get(curLineIndex).startTimeMs);
-        }
-    }
 
     /**
      * 设置数据
@@ -247,22 +178,145 @@ public class KrcView extends RecyclerView {
         for (int i = 0; i < data.size(); i++) {
             final int next = i + 1;
             if (next < data.size()) {
-                data.get(i).nextKrcLineInfo = data.get(next);
+                data.get(i).next = data.get(next);
             }
         }
-        setAdapter(new Adapter());
+        krcInnerView.setAdapter(new Adapter());
     }
 
 
-    private void scrollToPositionWithOffset(int position) {
-        if (position < 0 || position >= krcData.size() || getLayoutManager() == null) {
+    public void setScrollLocateView(@NonNull View view) {
+        scrollLocateView = view;
+        this.addView(view);
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        layoutScrollLocateView();
+        super.onLayout(changed, left, top, right, bottom);
+    }
+
+    private void layoutScrollLocateView() {
+        if (scrollLocateView == null) {
             return;
         }
-        topSmoothScroller.setTargetPosition(position);
-        getLayoutManager().startSmoothScroll(topSmoothScroller);
+        final LayoutManager lm = krcInnerView.getLayoutManager();
+        View currentLineItemView = null;
+        if (curLineIndex != -1 && lm != null) {
+            currentLineItemView = lm.findViewByPosition(curLineIndex);
+        }
+        if (currentLineItemView == null) {
+            return;
+        }
+        final int centerY = currentLineItemView.getBottom();
+        final int l = (getWidth() - scrollLocateView.getWidth()) >>> 1;
+        final int t = centerY - (scrollLocateView.getHeight() >>> 1);
+        FrameLayout.LayoutParams lp = (LayoutParams) scrollLocateView.getLayoutParams();
+        lp.topMargin = t;
+//        scrollLocateView.layout(l, t, l + scrollLocateView.getWidth(), t + scrollLocateView.getHeight());
     }
 
-    private class Adapter extends RecyclerView.Adapter<ViewHolder> {
+    private class KrcInnerView extends RecyclerView {
+
+        private final LinearSmoothScroller smoothScroller;
+
+        public KrcInnerView(@NonNull Context context) {
+            super(context);
+            smoothScroller = new LinearSmoothScroller(getContext()) {
+                public int getVerticalSnapPreference() {
+                    return SNAP_TO_START;
+                }
+
+                @Override
+                public int calculateDtToFit(int viewStart, int viewEnd, int boxStart, int boxEnd, int snapPreference) {
+                    return (boxStart - viewStart) + currentLineTopOffset;
+                }
+
+                public float calculateSpeedPerPixel(DisplayMetrics displayMetrics) {
+                    return super.calculateSpeedPerPixel(displayMetrics) * 12;
+                }
+            };
+            init();
+        }
+
+        private void init() {
+            this.setHasFixedSize(true);
+            this.setLayoutManager(new LinearLayoutManager(getContext(), VERTICAL, false) {
+                @Override
+                public void measureChildWithMargins(@NonNull View child, int widthUsed, int heightUsed) {
+                    super.measureChildWithMargins(child, widthUsed, heightUsed);
+                    if (getAdapter() == null) {
+                        return;
+                    }
+                    final LayoutParams lp = (LayoutParams) child.getLayoutParams();
+                    final int adapterPosition = lp.getViewAdapterPosition();
+                    if (adapterPosition < 0) {
+                        return;
+                    }
+                    if (adapterPosition == 0) {
+                        lp.topMargin = currentLineTopOffset;
+                    } else {
+                        lp.topMargin = 0;
+                    }
+
+                    if (adapterPosition == getAdapter().getItemCount() - 1) {
+                        lp.bottomMargin =
+                                KrcView.this.getHeight() - KrcView.this.getPaddingBottom()
+                                        - KrcView.this.getPaddingTop() -
+                                        (child.getHeight() + (int) lineSpace + currentLineTopOffset);
+                    } else {
+                        lp.bottomMargin = 0;
+                    }
+                }
+
+            });
+            if (lineSpace > 0f) {
+                addItemDecoration(new ItemDecoration() {
+                    @Override
+                    public void getItemOffsets(@NonNull Rect outRect, @NonNull View view, @NonNull RecyclerView parent,
+                            @NonNull State state) {
+                        final int position = parent.getChildAdapterPosition(view);
+                        if (position > 0) {
+                            outRect.top = (int) lineSpace;
+                        }
+                    }
+                });
+            }
+
+        }
+
+        private void updateCurrentLineState(long progress) {
+            if (getAdapter() == null) {
+                return;
+            }
+            if (curLineIndex != lastLineIndex) {
+                if (lastLineIndex != -1) {
+                    getAdapter().notifyItemChanged(lastLineIndex, false);
+                }
+                if (curLineIndex != -1) {
+                    getAdapter().notifyItemChanged(curLineIndex, true);
+                }
+                lastLineIndex = curLineIndex;
+                // scroll to current line
+                scrollToPositionWithOffset(Math.max(0, curLineIndex));
+            }
+            if (curLineIndex != -1) {
+                getAdapter().notifyItemChanged(curLineIndex, progress - krcData.get(curLineIndex).startTimeMs);
+            }
+        }
+
+        private void scrollToPositionWithOffset(int position) {
+            if (position < 0 || position >= krcData.size() || getLayoutManager() == null) {
+                return;
+            }
+            smoothScroller.setTargetPosition(position);
+            getLayoutManager().startSmoothScroll(smoothScroller);
+        }
+
+
+    }
+
+    private class Adapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
 
         @NonNull
         @Override
@@ -310,7 +364,6 @@ public class KrcView extends RecyclerView {
     private class KrcLineView extends View implements AnimatorUpdateListener {
 
         private static final String TAG = "KrcLineView";
-
         private KrcLineInfo krcLineInfo;
         private final TextPaint currentLineTextPaint = new TextPaint();
         private final Paint maxTextSizePaint = new Paint();
@@ -353,23 +406,21 @@ public class KrcView extends RecyclerView {
             }
             krcLineInfo = info;
             float previousWordsWidth = 0;
-            if (info.words != null) {
-                for (int i = 0; i < info.words.size(); i++) {
-                    final Word word = info.words.get(i);
-                    word.previousWordsWidth = previousWordsWidth;
-                    word.textWidth = maxTextSizePaint.measureText(word.text);
-                    previousWordsWidth += word.textWidth;
-                    final int next = i + 1;
-                    if (next < info.words.size()) {
-                        word.next = info.words.get(next);
-                    }
+            for (int i = 0; i < info.words.size(); i++) {
+                final Word word = info.words.get(i);
+                word.previousWordsWidth = previousWordsWidth;
+                word.textWidth = maxTextSizePaint.measureText(word.text);
+                previousWordsWidth += word.textWidth;
+                final int next = i + 1;
+                if (next < info.words.size()) {
+                    word.next = info.words.get(next);
                 }
             }
             KrcLineView.this.requestLayout();
         }
 
         public void setTimeMs(final long timeMs) {
-            if (krcLineInfo == null || krcLineInfo.words == null || krcLineInfo.words.isEmpty() || !isCurrentLine) {
+            if (krcLineInfo == null || krcLineInfo.words.isEmpty() || !isCurrentLine) {
                 return;
             }
             this.timeMs = timeMs;
@@ -516,7 +567,7 @@ public class KrcView extends RecyclerView {
             canvas.restore();
         }
 
-        @SuppressLint("SoonBlockedPrivateApi")
+        @SuppressLint({"SoonBlockedPrivateApi", "DiscouragedPrivateApi"})
         private void drawLineText(Canvas canvas, int line) {
             if (staticLayout == null || canvas == null) {
                 return;
@@ -565,6 +616,14 @@ public class KrcView extends RecyclerView {
             float size = (float) animation.getAnimatedValue();
             currentLineTextPaint.setTextSize(size);
             invalidate();
+        }
+    }
+
+    private class ScrollListener extends RecyclerView.OnScrollListener {
+
+        @Override
+        public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+
         }
     }
 

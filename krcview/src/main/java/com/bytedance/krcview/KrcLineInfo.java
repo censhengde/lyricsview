@@ -1,5 +1,8 @@
 package com.bytedance.krcview;
 
+import androidx.annotation.Keep;
+import androidx.annotation.NonNull;
+import java.util.Collections;
 import java.util.List;
 
 /**
@@ -7,6 +10,7 @@ import java.util.List;
  *
  * explain：
  */
+@Keep
 public class KrcLineInfo implements Comparable<Long> {
 
     public long startTimeMs;
@@ -17,13 +21,14 @@ public class KrcLineInfo implements Comparable<Long> {
     }
 
     public String text;
-    public List<Word> words;
-    public KrcLineInfo nextKrcLineInfo;
+    @NonNull
+    public List<Word> words = Collections.emptyList();
+    KrcLineInfo next;
 
     @Override
     public int compareTo(Long progress) {
 
-        if (nextKrcLineInfo == null || (progress >= startTimeMs && progress < nextKrcLineInfo.startTimeMs)) {
+        if (next == null || (progress >= startTimeMs && progress < next.startTimeMs)) {
             return 0;
         }
         if (progress < startTimeMs) {
@@ -33,15 +38,15 @@ public class KrcLineInfo implements Comparable<Long> {
 
     }
 
+    @Keep
     public static class Word implements Comparable<Long> {
 
         public long startTimeMs;
         public long duration;
         public String text;
-        public float previousWordsWidth;
-        public float textWidth;
-
-        public Word next;
+        float previousWordsWidth;
+        float textWidth;
+        Word next;
 
 
         @Override
